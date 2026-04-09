@@ -1,0 +1,38 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  REGISTRY: registry.gitlab.com/univlille/startupweek/2026/groupe-11/deploy
+  IMAGE_WEB: $REGISTRY/site-statique:latest
+
+# ─── BUILD IMAGE DOCKER ────────────────────────────
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $GROUP_REGISTRY_USER -p $GROUP_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      cat > /tmp/Dockerfile.web << 'EOF'
+      FROM nginx:alpine
+      COPY index.html /usr/share/nginx/html/index.html
+      COPY public/css/ /usr/share/nginx/html/css/
+      COPY src/ /usr/share/nginx/html/src/
+      COPY public/downloads/ /usr/share/nginx/html/downloads/
+      EXPOSE 80
+      EOF
+    - docker build -t $IMAGE_WEB -f /tmp/Dockerfile.web .
+    - docker push $IMAGE_WEB
+  only:
+    - main
+
+trigger-deploy:
+  stage: deploy
+  trigger:
+    project: univlille/startupweek/2026/groupe-11/deploy
+    branch: main
+  only:
+    - main 

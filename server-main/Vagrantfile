@@ -1,0 +1,118 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "debian/bookworm64"
+  config.vm.box_check_update = true
+  config.vm.hostname = "debian12-docker"
+  config.vm.network "private_network", ip: "192.168.56.10"
+  config.vm.network "forwarded_port", guest: 443,  host: 8080
+  config.vm.network "forwarded_port", guest: 5432, host: 5432
+  config.vm.synced_folder ".", "/vagrant", type: "virtualbox"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.name   = "debian12-docker"
+    vb.memory = "2048"
+    vb.cpus   = 2
+    vb.gui    = false
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    set -euo pipefail
+
+    echo "==> Mise à jour du système"
+    apt-get update -qq
+    apt-get upgrade -y -qq
+
+    echo "==> Installation des dépendances"
+    apt-get install -y -qq \
+      ca-certificates \
+      curl \
+      gnupg \
+      lsb-release \
+      git \
+      vim \
+      htop
+
+    echo "==> Ajout du dépôt officiel Docker"
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+      https://download.docker.com/linux/debian \
+      $(lsb_release -cs) stable" \
+      | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    echo "==> Installation de Docker Engine et Docker Compose"
+    apt-get update -qq
+    apt-get install -y -qq \
+      docker-ce \
+      docker-ce-cli \
+      containerd.io \
+      docker-buildx-plugin \
+      docker-compose-plugin
+
+    echo "==> Activation et démarrage de Docker"
+    systemctl enable docker
+    systemctl start docker
+
+    echo "==> Ajout de l'utilisateur vagrant au groupe docker"
+    usermod -aG docker vagrant
+
+    echo "==> Vérification des versions installées"
+    docker --version
+    docker compose version
+
+    echo "==> Création du docker-compose.yml"
+    mkdir -p /home/vagrant/app
+    cat > /home/vagrant/app/docker-compose.yml << 'EOF'
+services:
+
+  alpine:
+    image: alpine:latest
+    container_name: alpine
+    restart: unless-stopped
+    command: sh -c "while true; do sleep 3600; done"
+    networks:
+      - app-network
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB:       mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+EOF
+
+    chown -R vagrant:vagrant /home/vagrant/app
+
+    echo "==> Démarrage des conteneurs"
+    cd /home/vagrant/app
+    docker compose up -d
+
+    docker compose ps
+
+    echo "==> Provisioning terminé !"
+    echo "    PostgreSQL : localhost:5432 | user: admin | password: secret | db: mydb"
+  SHELL
+end

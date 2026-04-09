@@ -1,0 +1,16 @@
+stages:
+  - 🧪 tests
+
+junit:
+  stage: 🧪 tests
+  image: maven:3-eclipse-temurin-17
+  services:
+    - name: postgres:16-alpine
+      alias: dbhost
+  variables:
+    SPRING_DATASOURCE_URL:      jdbc:postgresql://dbhost:5432/genzen
+    SPRING_DATASOURCE_USERNAME: othemanekhachnaneetu
+    SPRING_DATASOURCE_PASSWORD: moi
+    SPRING_JPA_HIBERNATE_DDL_AUTO: update
+  script:
+    - mvn test

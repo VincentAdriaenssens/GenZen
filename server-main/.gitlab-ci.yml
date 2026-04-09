@@ -1,0 +1,75 @@
+stages:
+  - test
+  - quality
+  - build
+  - sonar
+  - deploy
+  
+variables:
+  REGISTRY: registry.gitlab.com/univlille/startupweek/2026/groupe-11/deploy
+  IMAGE_BACKEND: $REGISTRY/backend:latest
+  IMAGE_NGINX: $REGISTRY/nginx-proxy:latest
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+cache:
+  paths:
+    - .m2/repository
+
+# ─── TEST ───────────────────────────────────────────
+test:
+  stage: test
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - cd genzen
+    - mvn verify -B
+  artifacts:
+    paths:
+      - genzen/target/site/jacoco/
+    expire_in: 1 day
+
+# ─── SONARQUBE ──────────────────────────────────────
+sonar:
+  stage: quality
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - cd genzen
+    - mvn verify sonar:sonar -B
+      -Dsonar.host.url=$SONAR_HOST_URL
+      -Dsonar.token=$SONAR_TOKEN
+      -Dsonar.projectKey=univlille_server
+      -Dsonar.organization=$SONAR_ORGANIZATION
+  only:
+    - main
+
+# ─── BUILD IMAGES DOCKER ────────────────────────────
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $GROUP_REGISTRY_USER -p $GROUP_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    # ── Backend ──
+    - docker build -t $IMAGE_BACKEND -f genzen/Dockerfile genzen/
+    - docker push $IMAGE_BACKEND
+    - cp nginx.conf /tmp/nginx.conf
+    - |
+      cat > /tmp/Dockerfile.nginx << 'EOF'
+      FROM nginx:alpine
+      COPY nginx.conf /etc/nginx/conf.d/default.conf
+      EXPOSE 80
+      EXPOSE 443
+      EOF
+    - docker build -t $IMAGE_NGINX -f /tmp/Dockerfile.nginx /tmp/
+    - docker push $IMAGE_NGINX
+  only:
+    - main
+
+trigger-deploy:
+  stage: deploy
+  trigger:
+    project: univlille/startupweek/2026/groupe-11/deploy
+    branch: main
+  only:
+    - main  

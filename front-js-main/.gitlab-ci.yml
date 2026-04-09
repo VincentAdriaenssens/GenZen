@@ -1,0 +1,66 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  REGISTRY: registry.gitlab.com/univlille/startupweek/2026/groupe-11/deploy
+  IMAGE_VITRINE: $REGISTRY/vitrine:latest
+
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - node_modules/
+
+# ─── BUILD ───────────────────────────────────────────────────────────────────
+build:vitrine:
+  stage: build
+  image: node:22-alpine
+  before_script:
+    - npm ci
+  script:
+    - echo "VITE_API_URL=$VITE_API_URL" > .env
+    - npm run build
+  artifacts:
+    name: "vitrine-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - dist/
+    expire_in: 1 day
+  only:
+    - main
+    - master
+
+# ─── PUSH IMAGE DOCKER ───────────────────────────────────────────────────────
+build:docker:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs:
+    - build:vitrine
+  before_script:
+    - docker login -u $GROUP_REGISTRY_USER -p $GROUP_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      cat > Dockerfile.vitrine << 'EOF'
+      FROM nginx:alpine
+      COPY dist/ /usr/share/nginx/html/
+      COPY nginx.conf /etc/nginx/conf.d/default.conf
+      EXPOSE 80
+      EOF
+    - docker build -t $IMAGE_VITRINE -f Dockerfile.vitrine .
+    - docker push $IMAGE_VITRINE
+  only:
+    - main
+    - master
+
+# ─── TRIGGER DEPLOY ──────────────────────────────────────────────────────────
+trigger-deploy:
+  stage: deploy
+  trigger:
+    project: univlille/startupweek/2026/groupe-11/deploy
+    branch: main
+  only:
+    - main
+    - master

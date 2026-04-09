@@ -1,0 +1,27 @@
+# 1) Créer un parent
+
+curl -s -X POST http://localhost:8080/api/users/register/parent 
+  -H "Content-Type: application/json" 
+  -d '{"email":"parent@test.com","mdp":"1234"}' | jq
+
+# 2) Ajouter un enfant (remplace 1 par l'id du parent retourné)
+
+curl -s -X POST http://localhost:8080/api/users/1/addChild 
+  -H "Content-Type: application/json" 
+  -d '{"email":"enfant@test.com","mdp":"1234"}' | jq
+
+# 3) Configurer le temps écran enfant (remplace 2 par l'id enfant)
+
+curl -s -X POST http://localhost:8080/api/temps/2 
+  -H "Content-Type: application/json" 
+  -d '{"tempsMax":90,"tempsRecompenses":30}' | jq
+
+# 4) Créer une mission assignée à l'enfant
+
+curl -s -X POST http://localhost:8080/api/missions 
+  -H "Content-Type: application/json" 
+  -d '{"title":"Ranger chambre","description":"15 min","tmp":15,"childId":2,"parentId":1}' | jq
+
+# 5) Valider la mission (récompense dispo demain)
+
+curl -s -X POST http://localhost:8080/api/missions/validate/2/1 | jq

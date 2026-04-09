@@ -1,0 +1,46 @@
+services:
+  backend:
+    image: registry.gitlab.com/univlille/startupweek/2026/groupe-11/deploy/backend:latest
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/postgres
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=admin
+      - APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*,https://*.generationzen.fr,https://generationzen.fr
+      - SERVER_SERVLET_SESSION_SECRET=528a0cf835d70036afa8cec023dbd2a029976e14489fb9573a3a436b665d111c
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  nginx-proxy:
+    image: registry.gitlab.com/univlille/startupweek/2026/groupe-11/deploy/nginx-proxy:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+      - site-statique
+      - vitrine
+    restart: unless-stopped
+
+  site-statique:
+    image: registry.gitlab.com/univlille/startupweek/2026/groupe-11/deploy/site-statique:latest
+    restart: unless-stopped
+
+  vitrine:
+    image: registry.gitlab.com/univlille/startupweek/2026/groupe-11/deploy/vitrine:latest
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
